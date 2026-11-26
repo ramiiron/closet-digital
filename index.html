@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Clóset Digital</title>
+<meta name="description" content="Tu clóset digitalizado: ideas de outfits según el clima y probador virtual con IA">
+<meta name="theme-color" content="#FAF5EC">
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="apple-touch-icon" href="./icons/icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Clóset">
+<link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+<div id="splash">
+  <img src="./images/splash.jpg" alt="">
+  <div class="sp-txt">
+    <div class="sp-name">Clóset Digital<span class="dot">.</span></div>
+    <div class="sp-sub">Outfits · Clima · Probador IA</div>
+    <div class="sp-load">Abriendo tu clóset…</div>
+  </div>
+</div>
+<div id="v-login">
+  <div class="login-card">
+    <img src="./icons/icon-192.png" alt="Clóset Digital">
+    <h2>Clóset Digital</h2>
+    <p>Ingresa con tu cuenta para ver y sincronizar tu clóset, tus outfits y tu probador.</p>
+    <label>Correo</label>
+    <input id="login-email" type="email" autocomplete="username" placeholder="correo@ejemplo.com">
+    <label>Contraseña</label>
+    <input id="login-pass" type="password" autocomplete="current-password" placeholder="Tu contraseña">
+    <p class="login-error" id="login-error" style="display:none"></p>
+    <button class="btn" id="btn-login">Ingresar</button>
+    <button class="login-link" id="login-olvide">Olvidé mi contraseña</button>
+  </div>
+</div>
+<header>
+  <h1>Clóset Digital<span class="dot">.</span></h1>
+  <div class="sub">Outfits · clima · probador</div>
+</header>
+<main>
+  <section id="vclo" class="view"><div id="clo"></div></section>
+  <section id="vide" class="view"><div id="ide"></div></section>
+  <section id="vtry" class="view"><div id="try"></div></section>
+  <section id="vset" class="view"><div id="set"></div></section>
+</main>
+<div id="picker" style="display:none"></div>
+<nav>
+  <button data-v="clo" class="on"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a2 2 0 1 1 2 2c-.8 0-2 .6-2 2"/><path d="M12 7v1.5L3.5 15a1 1 0 0 0 .8 1.6h15.4a1 1 0 0 0 .8-1.6L12 8.5"/></svg></span>Clóset</button>
+  <button data-v="ide"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.7 4.6L18 9.2l-4.3 1.6L12 15.4l-1.7-4.6L6 9.2l4.3-1.6z"/><path d="M18.5 15.5l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z"/></svg></span>Ideas</button>
+  <button data-v="try"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="2.2"/><path d="M12 8v5M8.5 21l2-8h3l2 8M5.5 11.5L12 9l6.5 2.5"/></svg></span>Probador</button>
+  <button data-v="set"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 8h9M17 8h3M4 16h3M11 16h9"/><circle cx="15" cy="8" r="2.2"/><circle cx="9" cy="16" r="2.2"/></svg></span>Ajustes</button>
+</nav>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="./app.js"></script>
+</body>
+</html>
