@@ -6,7 +6,7 @@
    y config en 'config/closet_app' (claves API + foto de la persona). */
 
 const LS_KEY = 'closet-digital-v1';
-const APP_VERSION = '1.0';
+const APP_VERSION = '1.1';
 
 const CATS = [
   { id: 'top', name: 'Parte de arriba' },
@@ -21,6 +21,13 @@ const SEASONS = ['Verano', 'Invierno', 'Media estación', 'Todo el año'];
 const NEUTRALS = ['Negro', 'Blanco', 'Gris', 'Beige', 'Café', 'Azul', 'Celeste'];
 
 function catName(id) { const c = CATS.find(x => x.id === id); return c ? c.name : id; }
+const DEFAULT_PROFILES = [
+  { id: 'p-ramiro', name: 'Ramiro' },
+  { id: 'p-nicole', name: 'Nicole' },
+  { id: 'p-isidora', name: 'Isidora' },
+  { id: 'p-gabriel', name: 'Gabriel' }
+];
+const DEFAULT_PROFILE = 'p-ramiro';
 function norm(s) { return String(s || '').trim().toLowerCase(); }
 function esc(s) {
   return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -52,16 +59,58 @@ function load() {
       if (!Array.isArray(s.items)) s.items = [];
       if (!Array.isArray(s.outfits)) s.outfits = [];
       if (!s.config) s.config = { removebgKey: '', geminiKey: '', personPhoto: '' };
+      if (!Array.isArray(s.config.profiles) || !s.config.profiles.length) s.config.profiles = DEFAULT_PROFILES.slice();
+      if (!s.config.personPhotos || typeof s.config.personPhotos !== 'object') s.config.personPhotos = {};
       return s;
     }
   } catch (e) {}
-  return { items: [], outfits: [], config: { removebgKey: '', geminiKey: '', personPhoto: '' } };
+  return { items: [], outfits: [], config: { removebgKey: '', geminiKey: '', personPhoto: '', profiles: DEFAULT_PROFILES.slice(), personPhotos: {} } };
 }
 function persistLocal() {
   try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch (e) {}
 }
 let state = load();
 function itemById(id) { return state.items.find(i => i.id === id) || null; }
+let currentProfile = (() => {
+  try {
+    const p = localStorage.getItem('closet-profile');
+    if (p && state.config.profiles.some(x => x.id === p)) return p;
+  } catch (e) {}
+  return DEFAULT_PROFILE;
+})();
+function profiles() { return state.config.profiles && state.config.profiles.length ? state.config.profiles : DEFAULT_PROFILES; }
+function profileById(id) { return profiles().find(p => p.id === id) || profiles()[0]; }
+function activeProfile() { return profileById(currentProfile); }
+function ownerOf(x) { return x.owner || DEFAULT_PROFILE; }
+function itemsOf(pid) { return state.items.filter(i => ownerOf(i) === pid); }
+function outfitsOf(pid) { return state.outfits.filter(o => ownerOf(o) === pid); }
+function personPhotoOf(pid) {
+  const pp = (state.config.personPhotos || {})[pid];
+  if (pp) return pp;
+  if (pid === DEFAULT_PROFILE && state.config.personPhoto) return state.config.personPhoto;
+  return '';
+}
+function profileBarHtml() {
+  let h = '<div class="profbar">';
+  profiles().forEach(p => {
+    const photo = personPhotoOf(p.id);
+    h += '<button class="prof' + (p.id === currentProfile ? ' on' : '') + '" data-prof="' + p.id + '">' +
+      '<span class="pava">' + (photo ? '<img src="' + photo + '" alt="">' : esc((p.name || '?').charAt(0))) + '</span>' +
+      '<span class="pname">' + esc(p.name) + '</span></button>';
+  });
+  return h + '</div>';
+}
+function bindProfileBar(el) {
+  el.querySelectorAll('[data-prof]').forEach(b => {
+    b.onclick = () => {
+      currentProfile = b.getAttribute('data-prof');
+      try { localStorage.setItem('closet-profile', currentProfile); } catch (e) {}
+      closetFilter = 'all'; closetMode = null; addDraft = null;
+      ideasList = []; ideasErr = ''; trySel = []; tryResult = ''; tryErr = '';
+      renderCurrent();
+    };
+  });
+}
 
 // ---------- Operaciones (nube o local) ----------
 async function saveItem(it) {
@@ -174,7 +223,9 @@ async function startCloud() {
         state.config = {
           removebgKey: c.removebgKey || '',
           geminiKey: c.geminiKey || '',
-          personPhoto: c.personPhoto || state.config.personPhoto || ''
+          personPhoto: c.personPhoto || state.config.personPhoto || '',
+          profiles: (Array.isArray(c.profiles) && c.profiles.length) ? c.profiles : state.config.profiles,
+          personPhotos: (c.personPhotos && typeof c.personPhotos === 'object') ? c.personPhotos : (state.config.personPhotos || {})
         };
         persistLocal();
         if (currentView === 'set') renderSettings();
@@ -287,7 +338,7 @@ async function geminiTag(imgDataUrl) {
     '{"nombre":"nombre corto en español, ej: Suéter de lana beige","categoria":"top","color":"Beige","temporada":"Invierno"} ' +
     'categoria debe ser una de: top (parte de arriba), bottom (parte de abajo), dress (vestido o enterito), coat (abrigo o chaqueta), shoes (zapatos), accessory (cartera, joyas, cinturón, etc). ' +
     'color debe ser uno de: ' + COLORS.join(', ') + '. temporada debe ser una de: ' + SEASONS.join(', ') + '.';
-  const json = await geminiCall('gemini-2.5-flash', {
+  const json = await geminiCall('gemini-3.8-flash', {
     contents: [{ parts: [{ text: prompt }, { inlineData: { mimeType: inl.mime, data: inl.data } }] }],
     generationConfig: { responseMimeType: 'application/json' }
   });
@@ -302,12 +353,12 @@ async function geminiTag(imgDataUrl) {
   };
 }
 async function geminiOutfits(wx) {
-  const catalog = state.items.map(i => ({ id: i.id, nombre: i.name, categoria: i.cat, color: i.color, temporada: i.season }));
+  const catalog = itemsOf(currentProfile).map(i => ({ id: i.id, nombre: i.name, categoria: i.cat, color: i.color, temporada: i.season }));
   const prompt = 'Eres una estilista personal. Este es el clóset completo de la persona (JSON): ' + JSON.stringify(catalog) +
     '. El clima de hoy: ' + wxSummary(wx) +
     '. Arma exactamente 3 outfits distintos usando SOLO prendas del clóset. Cada outfit debe tener zapatos y (un vestido) o (parte de arriba + parte de abajo); agrega abrigo si hace frío (menos de 10 grados) y un accesorio solo si combina. ' +
     'Responde SOLO un JSON válido, sin texto extra, con esta forma: [{"prendas":["id1","id2"],"porque":"una frase breve en español explicando la elección según el clima"}]';
-  const json = await geminiCall('gemini-2.5-flash', {
+  const json = await geminiCall('gemini-3.8-flash', {
     contents: [{ parts: [{ text: prompt }] }],
     generationConfig: { responseMimeType: 'application/json' }
   });
@@ -414,7 +465,7 @@ function shuffled(arr) {
 function generateOutfits(wx) {
   const target = seasonForTemp(wx ? wx.tmax : null);
   const cold = wx ? wx.tmax <= 10 : false;
-  const pool = cat => shuffled(state.items.filter(i => i.cat === cat && fitsSeason(i, target)));
+  const pool = cat => shuffled(itemsOf(currentProfile).filter(i => i.cat === cat && fitsSeason(i, target)));
   const tops = pool('top'), bottoms = pool('bottom'), dresses = pool('dress'),
     shoes = pool('shoes'), coats = pool('coat'), accs = pool('accessory');
   if (!shoes.length) return [];
@@ -476,18 +527,20 @@ function itemImgOrPh(it, phClass) {
 function renderCloset() {
   const el = document.getElementById('clo');
   if (closetMode !== null) { renderItemForm(el); return; }
-  let html = '<div class="hero"><img src="./images/splash.jpg" alt=""><div class="hero-txt"><div class="ht">¿Qué me pongo hoy?</div><div class="hs">Tu clóset completo, en el bolsillo</div></div></div>';
+  const myItems = itemsOf(currentProfile);
+  let html = profileBarHtml() +
+    '<div class="hero"><img src="./images/splash.jpg" alt=""><div class="hero-txt"><div class="ht">¿Qué me pongo hoy?</div><div class="hs">El clóset de ' + esc(activeProfile().name) + ', en el bolsillo</div></div></div>';
   html += '<button class="btn" id="cAdd" style="margin:0 0 14px">+ Agregar prenda</button>';
-  html += '<div class="chips"><button class="chip' + (closetFilter === 'all' ? ' on' : '') + '" data-f="all">Todo (' + state.items.length + ')</button>';
+  html += '<div class="chips"><button class="chip' + (closetFilter === 'all' ? ' on' : '') + '" data-f="all">Todo (' + myItems.length + ')</button>';
   CATS.forEach(c => {
-    const n = state.items.filter(i => i.cat === c.id).length;
+    const n = myItems.filter(i => i.cat === c.id).length;
     if (n) html += '<button class="chip' + (closetFilter === c.id ? ' on' : '') + '" data-f="' + c.id + '">' + esc(c.name) + ' (' + n + ')</button>';
   });
   html += '</div>';
-  const items = state.items.filter(i => closetFilter === 'all' || i.cat === closetFilter)
+  const items = myItems.filter(i => closetFilter === 'all' || i.cat === closetFilter)
     .slice().sort((a, b) => a.name.localeCompare(b.name));
-  if (!state.items.length) {
-    html += '<div class="card"><div class="empty">Tu clóset está vacío.<br>Toca <b>+ Agregar prenda</b>, saca una foto y la app la recorta y la etiqueta sola.</div></div>';
+  if (!myItems.length) {
+    html += '<div class="card"><div class="empty">El clóset de ' + esc(activeProfile().name) + ' está vacío.<br>Toca <b>+ Agregar prenda</b>, saca una foto y la app la recorta y la etiqueta sola.</div></div>';
   } else if (!items.length) {
     html += '<div class="card"><div class="empty">Nada en esta categoría todavía.</div></div>';
   } else {
@@ -500,6 +553,7 @@ function renderCloset() {
     html += '</div>';
   }
   el.innerHTML = html;
+  bindProfileBar(el);
   document.getElementById('cAdd').onclick = () => {
     closetMode = 'add';
     addDraft = { img: '', name: '', cat: 'top', color: 'Beige', season: 'Todo el año' };
@@ -553,7 +607,8 @@ function renderItemForm(el) {
   document.getElementById('gSave').onclick = () => {
     sync();
     const name = d.name.trim() || catName(d.cat);
-    const it = { id: isNew ? uid('pr-') : closetMode, name, cat: d.cat, color: d.color, season: d.season, img: d.img || '' };
+    const prev = isNew ? null : itemById(closetMode);
+    const it = { id: isNew ? uid('pr-') : closetMode, name, cat: d.cat, color: d.color, season: d.season, img: d.img || '', owner: prev ? ownerOf(prev) : currentProfile };
     closetMode = null; addDraft = null;
     saveItem(it).then(() => renderCloset());
     renderCloset();
@@ -608,7 +663,7 @@ function outfitNames(ids) {
 }
 function renderIdeas() {
   const el = document.getElementById('ide');
-  let html = '';
+  let html = profileBarHtml();
   if (wxCache) {
     html += '<div class="wxcard"><h2>Clima de hoy · ' + esc(wxCache.place) + '</h2>' +
       '<div class="wbig">' + wxCache.temp + '° · ' + esc(wxCache.desc) + '</div>' +
@@ -636,7 +691,7 @@ function renderIdeas() {
       '<div class="oacts"><button class="btn" data-save-idea="' + idx + '">Guardar outfit</button>' +
       '<button class="btn ghost small" data-try-idea="' + idx + '">Probar</button></div></div>';
   });
-  const saved = state.outfits.slice().sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  const saved = outfitsOf(currentProfile).slice().sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
   html += '<div class="card"><h2>Outfits guardados · ' + saved.length + '</h2>';
   if (!saved.length) html += '<div class="empty">Sin outfits guardados todavía.<br>Genera ideas y guarda tus favoritos.</div>';
   html += '</div>';
@@ -647,6 +702,7 @@ function renderIdeas() {
       '<div class="oacts"><button class="btn ghost" data-del-outfit="' + o.id + '">Eliminar</button></div></div>';
   });
   el.innerHTML = html;
+  bindProfileBar(el);
   const loc = document.getElementById('wLoc');
   if (loc) loc.onclick = () => {
     if (!navigator.geolocation) { alert('Este teléfono no comparte ubicación.'); return; }
@@ -659,7 +715,7 @@ function renderIdeas() {
   el.querySelectorAll('[data-save-idea]').forEach(b => {
     b.onclick = () => {
       const o = ideasList[Number(b.getAttribute('data-save-idea'))];
-      if (o) { saveOutfit({ id: uid('o-'), ids: o.ids.slice(), img: '', createdAt: Date.now() }).then(() => renderIdeas()); renderIdeas(); }
+      if (o) { saveOutfit({ id: uid('o-'), ids: o.ids.slice(), img: '', createdAt: Date.now(), owner: currentProfile }).then(() => renderIdeas()); renderIdeas(); }
     };
   });
   el.querySelectorAll('[data-try-idea]').forEach(b => {
@@ -690,13 +746,14 @@ async function generarIdeas() {
 // ---------- Vista Probador ----------
 function renderTry() {
   const el = document.getElementById('try');
-  const hasPerson = !!state.config.personPhoto;
-  let html = '';
+  const myPhoto = personPhotoOf(currentProfile);
+  const hasPerson = !!myPhoto;
+  let html = profileBarHtml();
   if (!hasPerson) {
     html += '<div class="personbox"><div class="empty" style="padding:6px 0 12px">Para el probador virtual, sube <b>una foto tuya de cuerpo completo</b>, con buena luz.<br>Se guarda una sola vez.</div>' +
       '<button class="btn" id="tPerson" style="margin-top:0">Subir mi foto</button></div>';
   } else {
-    html += '<div class="personbox"><img src="' + state.config.personPhoto + '" alt="Tu foto">' +
+    html += '<div class="personbox"><img src="' + myPhoto + '" alt="Tu foto">' +
       '<div><button class="login-link" id="tPerson" style="display:inline-block">Cambiar foto</button>' +
       '<button class="login-link" id="tPersonDel" style="display:inline-block;color:var(--red)">Quitar</button></div></div>';
   }
@@ -704,9 +761,10 @@ function renderTry() {
     html += '<div class="card"><div class="empty">El probador usa Gemini para generar la imagen.<br>Agrega tu clave de Gemini en la pestaña <b>Ajustes</b> y vuelve.</div></div>';
   }
   html += '<div class="card"><h2>Elige las prendas del outfit · ' + trySel.length + ' elegidas</h2>';
-  if (!state.items.length) html += '<div class="empty">Primero agrega prendas en la pestaña Clóset.</div>';
+  const myItems = itemsOf(currentProfile);
+  if (!myItems.length) html += '<div class="empty">Primero agrega prendas de ' + esc(activeProfile().name) + ' en la pestaña Clóset.</div>';
   CATS.forEach(c => {
-    const items = state.items.filter(i => i.cat === c.id);
+    const items = myItems.filter(i => i.cat === c.id);
     if (!items.length) return;
     html += '<div class="hint" style="margin:12px 0 6px"><b>' + esc(c.name) + '</b></div><div class="selgrid">';
     items.forEach(it => {
@@ -725,17 +783,20 @@ function renderTry() {
       '<div class="hint">Es una aproximación de IA: el calce y los detalles pueden variar de la realidad.</div>';
   }
   el.innerHTML = html;
+  bindProfileBar(el);
   const up = document.getElementById('tPerson');
   if (up) up.onclick = () => pickPhoto(async file => {
     try {
       const raw = await fileToDataURL(file);
       const small = await resizeDataURL(raw, 900, 'image/jpeg', 0.8);
-      await saveConfig({ personPhoto: small });
+      const pp = Object.assign({}, state.config.personPhotos || {});
+      pp[currentProfile] = small;
+      await saveConfig({ personPhotos: pp });
     } catch (e) { alert('No se pudo leer esa foto.'); }
     renderTry();
   });
   const del = document.getElementById('tPersonDel');
-  if (del) del.onclick = () => { if (confirm('¿Quitar tu foto del probador?')) { saveConfig({ personPhoto: '' }).then(() => renderTry()); renderTry(); } };
+  if (del) del.onclick = () => { if (confirm('¿Quitar la foto de ' + activeProfile().name + ' del probador?')) { const pp = Object.assign({}, state.config.personPhotos || {}); pp[currentProfile] = ''; saveConfig({ personPhotos: pp }).then(() => renderTry()); renderTry(); } };
   el.querySelectorAll('[data-sel]').forEach(b => {
     b.onclick = () => {
       const id = b.getAttribute('data-sel');
@@ -746,9 +807,12 @@ function renderTry() {
   });
   const gen = document.getElementById('tGen');
   if (gen) gen.onclick = generarProbador;
+  // El botón Generar depende de la foto del perfil activo
+  const genBtn = document.getElementById('tGen');
+  if (genBtn && (!hasPerson || !trySel.length || !state.config.geminiKey)) genBtn.setAttribute('disabled', '');
   const sv = document.getElementById('tSave');
   if (sv) sv.onclick = () => {
-    saveOutfit({ id: uid('o-'), ids: trySel.slice(), img: tryResult, createdAt: Date.now() }).then(() => { tryResult = ''; showView('ide'); });
+    saveOutfit({ id: uid('o-'), ids: trySel.slice(), img: tryResult, createdAt: Date.now(), owner: currentProfile }).then(() => { tryResult = ''; showView('ide'); });
   };
   const dc = document.getElementById('tDiscard');
   if (dc) dc.onclick = () => { tryResult = ''; renderTry(); };
@@ -756,13 +820,18 @@ function renderTry() {
 
 async function generarProbador() {
   const items = trySel.map(itemById).filter(Boolean);
-  if (!state.config.personPhoto || !items.length) return;
+  const myPhoto = personPhotoOf(currentProfile);
+  if (!myPhoto || !items.length) return;
   tryBusy = true; tryErr = ''; tryResult = ''; renderTry();
   try {
-    const img = await geminiTryOn(state.config.personPhoto, items);
+    const img = await geminiTryOn(myPhoto, items);
     tryResult = await resizeDataURL(img, 1000, 'image/jpeg', 0.85);
   } catch (e) {
-    tryErr = 'El probador no pudo generar la imagen. Revisa que tu clave de Gemini en Ajustes sea válida e inténtalo de nuevo.';
+    if (e && /429/.test(e.message || '')) {
+      tryErr = 'Gemini devolvió cuota excedida (429): el nivel gratis de tu proyecto casi no tiene cuota de imágenes. Puede liberarse con las horas o activando la facturación del proyecto en AI Studio. Las ideas y las etiquetas (texto) no dependen de esto.';
+    } else {
+      tryErr = 'El probador no pudo generar la imagen. Revisa que tu clave de Gemini en Ajustes sea válida e inténtalo de nuevo.';
+    }
   }
   tryBusy = false; renderTry();
 }
@@ -770,7 +839,13 @@ async function generarProbador() {
 // ---------- Ajustes ----------
 function renderSettings() {
   const el = document.getElementById('set');
+  const profInputs = profiles().map(p =>
+    '<label>' + esc(p.name) + '</label><input type="text" maxlength="24" data-pname="' + p.id + '" value="' + esc(p.name) + '">'
+  ).join('');
   el.innerHTML =
+    '<div class="card"><h2>Perfiles</h2>' + profInputs +
+    '<button class="btn" id="pSave">Guardar nombres</button>' +
+    '<div class="hint">Cada perfil tiene su propio clóset, su foto del probador y sus outfits guardados. Las claves de IA y la cuenta se comparten.</div></div>' +
     '<div class="card"><h2>Claves de IA</h2>' +
     '<label style="margin-top:0">remove.bg (recorte de fotos)</label>' +
     '<input id="kRemovebg" type="password" autocomplete="off" placeholder="Pega tu clave de remove.bg" value="' + esc(state.config.removebgKey || '') + '">' +
@@ -795,6 +870,14 @@ function renderSettings() {
     '<button class="btn danger" id="sWipe" style="margin-top:10px">Borrar todo (clóset y outfits)</button>' +
     '<div class="hint">El respaldo no incluye las fotos en tamaño completo si exportas desde el teléfono; úsalo como registro.</div></div>' +
     '<div class="ver">Clóset Digital · v' + APP_VERSION + '</div>';
+  document.getElementById('pSave').onclick = () => {
+    const updated = profiles().map(p => {
+      const inp = el.querySelector('[data-pname="' + p.id + '"]');
+      const v = inp ? inp.value.trim() : '';
+      return { id: p.id, name: v || p.name };
+    });
+    saveConfig({ profiles: updated }).then(() => { alert('Perfiles guardados.'); renderSettings(); });
+  };
   document.getElementById('kSave').onclick = () => {
     const patch = {
       removebgKey: document.getElementById('kRemovebg').value.trim(),

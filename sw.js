@@ -1,4 +1,4 @@
-const CACHE = 'closet-pwa-v1';
+const CACHE = 'closet-pwa-v2';
 const CDN_CACHE = 'closet-pwa-cdn';
 const FILES = ['./', './index.html', './styles.css', './app.js', './manifest.webmanifest',
   './icons/icon-192.png', './icons/icon-512.png', './images/splash.jpg'];

@@ -199,3 +199,13 @@ body.unlocked #v-login{display:none}
 @media (prefers-reduced-motion: reduce){
   *,*::before,*::after{animation:none!important;transition:none!important;}
 }
+
+/* ---------- Perfiles ---------- */
+.profbar{display:flex;gap:6px;padding:2px 2px 14px;overflow-x:auto;scrollbar-width:none;}
+.profbar::-webkit-scrollbar{display:none;}
+.prof{flex:1;background:none;border:none;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:5px;padding:2px;font-family:inherit;min-width:64px;}
+.prof .pava{width:48px;height:48px;border-radius:50%;background:var(--card2);border:2px solid var(--line);display:flex;align-items:center;justify-content:center;font-family:var(--serif);font-size:20px;font-weight:600;color:var(--muted);overflow:hidden;}
+.prof .pava img{width:100%;height:100%;object-fit:cover;}
+.prof .pname{font-size:11.5px;font-weight:600;color:var(--muted);letter-spacing:.2px;}
+.prof.on .pava{border-color:var(--accent);background:var(--accent-soft);color:var(--accent-dark);box-shadow:0 0 0 3px rgba(222,85,34,.15);}
+.prof.on .pname{color:var(--ink);}
